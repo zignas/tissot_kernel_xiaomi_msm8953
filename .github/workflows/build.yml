@@ -1,0 +1,102 @@
+name: Build Tissot Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: wip
+          fetch-depth: 1
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex build-essential \
+            libssl-dev libelf-dev libncurses5-dev \
+            python3 cpio rsync wget zip
+
+      - name: Cache Clang r563880c
+        id: clang
+        uses: actions/cache@v4
+        with:
+          path: toolchain/clang-r563880c
+          key: clang-r563880c
+
+      - name: Get Clang r563880c
+        if: steps.clang.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p toolchain/clang-r563880c
+
+          wget -q --show-progress \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-16.0.0_r4/clang-r563880c.tar.gz" \
+            -O clang.tar.gz
+
+          tar -xzf clang.tar.gz \
+            -C toolchain/clang-r563880c
+
+          rm clang.tar.gz
+
+      - name: Build kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/toolchain/clang-r563880c/bin:$PATH"
+
+          make O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            KBUILD_DEFCONFIG=vendor/msm8953-perf_defconfig \
+            defconfig
+            
+          make O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            vendor/mi8953.config
+            
+          make O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            vendor/tissot.config
+
+          make -j$(nproc) \
+            O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            Image.gz-dtb
+
+      - name: Clone AnyKernel3
+        run: |
+          git clone --depth=1 \
+            https://github.com/zignas/AnyKernel3.git \
+            anykernel
+            
+      - name: Prepare AnyKernel3
+        run: |
+          cp out/arch/arm64/boot/Image.gz-dtb \
+            anykernel/
+
+      - name: Build AnyKernel3 ZIP
+        run: |
+          cd anykernel
+          zip -r9 ../Tissot-Kernel-AnyKernel3.zip . \
+            -x '.git/*' \
+            '*.md' \
+            'README*'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tissot-Kernel
+          path: |
+            Tissot-Kernel-AnyKernel3.zip            
+            out/arch/arm64/boot/Image
+            out/arch/arm64/boot/Image.gz
+            out/arch/arm64/boot/Image.gz-dtb
+            out/arch/arm64/boot/dts/vendor/qcom/tissot-titanium.dtb
