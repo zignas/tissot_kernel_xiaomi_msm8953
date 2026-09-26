@@ -4879,14 +4879,21 @@ ret:
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int dwc3_msm_pm_suspend(struct device *dev)
+satic int dwc3_msm_pm_suspend(struct device *dev)
 {
-	int ret = 0;
+ int ret = 0;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(dev, "dwc3-msm PM suspend\n");
 	dbg_event(0xFF, "PM Sus", 0);
+
+	/*
+ 	* Make sure pending PM/USB work is completed before changing
+	* pm_suspended. This prevents races with resume_work().
+	*/
+	
+	flush_workqueue(mdwc->dwc3_wq);
 
 	/*
 	 * Check if pm_suspend can proceed irrespective of runtimePM state of
@@ -4917,6 +4924,13 @@ static int dwc3_msm_pm_resume(struct device *dev)
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
 	dbg_event(0xFF, "PM Res", 0);
+
+   /*
+	* Synchronize with pending USB/PM work before changing
+	* pm_suspended. This avoids races with resume_work().
+	*/
+
+		flush_workqueue(mdwc->dwc3_wq);
 
 	atomic_set(&mdwc->pm_suspended, 0);
 
