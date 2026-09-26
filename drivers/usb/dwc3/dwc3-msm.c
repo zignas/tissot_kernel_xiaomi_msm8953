@@ -4879,7 +4879,7 @@ ret:
 }
 
 #ifdef CONFIG_PM_SLEEP
-satic int dwc3_msm_pm_suspend(struct device *dev)
+static int dwc3_msm_pm_suspend(struct device *dev)
 {
  int ret = 0;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
